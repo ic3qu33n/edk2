@@ -370,6 +370,7 @@ SortApicId (
   UINT32           ApCount;
   CPU_INFO_IN_HOB  *CpuInfoInHob;
   volatile UINT32  *StartupApSignal;
+  VOID             *SevEsSaveArea;
 
   ApCount      = CpuMpData->CpuCount - 1;
   CpuInfoInHob = (CPU_INFO_IN_HOB *)(UINTN)CpuMpData->CpuInfoInHob;
@@ -397,12 +398,17 @@ SortApicId (
         CopyMem (&CpuInfoInHob[Index1], &CpuInfo, sizeof (CPU_INFO_IN_HOB));
 
         //
-        // Also exchange the StartupApSignal.
+        // Also exchange the StartupApSignal and SevEsSaveArea.
         //
         StartupApSignal                            = CpuMpData->CpuData[Index3].StartupApSignal;
         CpuMpData->CpuData[Index3].StartupApSignal =
           CpuMpData->CpuData[Index1].StartupApSignal;
         CpuMpData->CpuData[Index1].StartupApSignal = StartupApSignal;
+
+        SevEsSaveArea                            = CpuMpData->CpuData[Index3].SevEsSaveArea;
+        CpuMpData->CpuData[Index3].SevEsSaveArea =
+          CpuMpData->CpuData[Index1].SevEsSaveArea;
+        CpuMpData->CpuData[Index1].SevEsSaveArea = SevEsSaveArea;
       }
     }
 
@@ -910,11 +916,18 @@ DxeApEntryPoint (
   CPU_MP_DATA  *CpuMpData
   )
 {
-  UINTN  ProcessorNumber;
+  UINTN                   ProcessorNumber;
+  MSR_IA32_EFER_REGISTER  EferMsr;
 
   GetProcessorNumber (CpuMpData, &ProcessorNumber);
-  InterlockedIncrement ((UINT32 *)&CpuMpData->FinishedCount);
+  if (CpuMpData->EnableExecuteDisableForSwitchContext) {
+    EferMsr.Uint64   = AsmReadMsr64 (MSR_IA32_EFER);
+    EferMsr.Bits.NXE = 1;
+    AsmWriteMsr64 (MSR_IA32_EFER, EferMsr.Uint64);
+  }
+
   RestoreVolatileRegisters (&CpuMpData->CpuData[0].VolatileRegisters, FALSE);
+  InterlockedIncrement ((UINT32 *)&CpuMpData->FinishedCount);
   PlaceAPInMwaitLoopOrRunLoop (
     CpuMpData->ApLoopMode,
     CpuMpData->CpuData[ProcessorNumber].StartupApSignal,
@@ -1294,7 +1307,14 @@ WakeUpAP (
       if (CpuMpData->SevSnpIsEnabled && (CpuMpData->InitFlag != ApInitConfig)) {
         SevSnpCreateAP (CpuMpData, -1);
       } else {
-        SendInitSipiSipiAllExcludingSelf ((UINT32)ExchangeInfo->BufferStart);
+        if ((CpuMpData->InitFlag == ApInitConfig) && FixedPcdGetBool (PcdFirstTimeWakeUpAPsBySipi)) {
+          //
+          // SIPI can be used for the first time wake up after reset to reduce boot time.
+          //
+          SendStartupIpiAllExcludingSelf ((UINT32)ExchangeInfo->BufferStart);
+        } else {
+          SendInitSipiSipiAllExcludingSelf ((UINT32)ExchangeInfo->BufferStart);
+        }
       }
     }
 
@@ -2181,8 +2201,9 @@ MpInitLibInitialize (
     if (MpHandOff->WaitLoopExecutionMode == sizeof (VOID *)) {
       ASSERT (CpuMpData->ApLoopMode != ApInHltLoop);
 
-      CpuMpData->FinishedCount = 0;
-      CpuMpData->InitFlag      = ApInitDone;
+      CpuMpData->FinishedCount                        = 0;
+      CpuMpData->InitFlag                             = ApInitDone;
+      CpuMpData->EnableExecuteDisableForSwitchContext = IsBspExecuteDisableEnabled ();
       SaveCpuMpData (CpuMpData);
       //
       // In scenarios where both the PEI and DXE phases run in the same
@@ -2194,7 +2215,12 @@ MpInitLibInitialize (
       // looping process there.
       //
       SwitchApContext (MpHandOff);
-      ASSERT (CpuMpData->FinishedCount == (CpuMpData->CpuCount - 1));
+      //
+      // Wait for all APs finished initialization
+      //
+      while (CpuMpData->FinishedCount < (CpuMpData->CpuCount - 1)) {
+        CpuPause ();
+      }
 
       //
       // Set Apstate as Idle, otherwise Aps cannot be waken-up again.

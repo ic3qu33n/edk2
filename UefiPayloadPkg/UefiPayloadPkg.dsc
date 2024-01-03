@@ -30,7 +30,6 @@
   DEFINE PS2_KEYBOARD_ENABLE          = FALSE
   DEFINE RAM_DISK_ENABLE              = FALSE
   DEFINE SIO_BUS_ENABLE               = FALSE
-  DEFINE UNIVERSAL_PAYLOAD            = FALSE
   DEFINE SECURITY_STUB_ENABLE         = TRUE
   DEFINE SMM_SUPPORT                  = FALSE
   DEFINE PLATFORM_BOOT_TIMEOUT        = 3
@@ -44,6 +43,14 @@
   DEFINE BOOTSPLASH_IMAGE             = FALSE
   DEFINE NVME_ENABLE                  = TRUE
   DEFINE CAPSULE_SUPPORT              = FALSE
+  #
+  # Setup Universal Payload
+  #
+  # ELF: Build UniversalPayload file as UniversalPayload.elf
+  # FIT: Build UniversalPayload file as UniversalPayload.fit
+  #
+  DEFINE UNIVERSAL_PAYLOAD            = FALSE
+  DEFINE UNIVERSAL_PAYLOAD_FORMAT     = ELF
 
   #
   # NULL:    NullMemoryTestDxe
@@ -248,6 +255,7 @@
   LocalApicLib|UefiCpuPkg/Library/BaseXApicX2ApicLib/BaseXApicX2ApicLib.inf
   MicrocodeLib|UefiCpuPkg/Library/MicrocodeLib/MicrocodeLib.inf
   CpuPageTableLib|UefiCpuPkg/Library/CpuPageTableLib/CpuPageTableLib.inf
+  SmmCpuSyncLib|UefiCpuPkg/Library/SmmCpuSyncLib/SmmCpuSyncLib.inf
 
   #
   # Platform
@@ -277,6 +285,7 @@
   #
   DebugPrintErrorLevelLib|UefiPayloadPkg/Library/DebugPrintErrorLevelLibHob/DebugPrintErrorLevelLibHob.inf
   PerformanceLib|MdePkg/Library/BasePerformanceLibNull/BasePerformanceLibNull.inf
+  ImagePropertiesRecordLib|MdeModulePkg/Library/ImagePropertiesRecordLib/ImagePropertiesRecordLib.inf
 !if $(SOURCE_DEBUG_ENABLE) == TRUE
   PeCoffExtraActionLib|SourceLevelDebugPkg/Library/PeCoffExtraActionLibDebug/PeCoffExtraActionLibDebug.inf
   DebugCommunicationLib|SourceLevelDebugPkg/Library/DebugCommunicationLibSerialPort/DebugCommunicationLibSerialPort.inf
@@ -311,7 +320,7 @@
   VariableFlashInfoLib|MdeModulePkg/Library/BaseVariableFlashInfoLib/BaseVariableFlashInfoLib.inf
   CcExitLib|UefiCpuPkg/Library/CcExitLibNull/CcExitLibNull.inf
   ReportStatusCodeLib|MdeModulePkg/Library/DxeReportStatusCodeLib/DxeReportStatusCodeLib.inf
-
+  FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
 [LibraryClasses.common]
 !if $(BOOTSPLASH_IMAGE)
   SafeIntLib|MdePkg/Library/BaseSafeIntLib/BaseSafeIntLib.inf
@@ -600,14 +609,26 @@
 !if "IA32" in "$(ARCH)"
   [Components.IA32]
   !if $(UNIVERSAL_PAYLOAD) == TRUE
-    UefiPayloadPkg/UefiPayloadEntry/UniversalPayloadEntry.inf
+    !if $(UNIVERSAL_PAYLOAD_FORMAT) == "ELF"
+      UefiPayloadPkg/UefiPayloadEntry/UniversalPayloadEntry.inf
+    !elseif $(UNIVERSAL_PAYLOAD_FORMAT) == "FIT"
+      UefiPayloadPkg/UefiPayloadEntry/FitUniversalPayloadEntry.inf
+    !else
+      UefiPayloadPkg/UefiPayloadEntry/UefiPayloadEntry.inf
+    !endif
   !else
     UefiPayloadPkg/UefiPayloadEntry/UefiPayloadEntry.inf
   !endif
 !else
   [Components.X64]
   !if $(UNIVERSAL_PAYLOAD) == TRUE
-    UefiPayloadPkg/UefiPayloadEntry/UniversalPayloadEntry.inf
+    !if $(UNIVERSAL_PAYLOAD_FORMAT) == "ELF"
+      UefiPayloadPkg/UefiPayloadEntry/UniversalPayloadEntry.inf
+    !elseif $(UNIVERSAL_PAYLOAD_FORMAT) == "FIT"
+      UefiPayloadPkg/UefiPayloadEntry/FitUniversalPayloadEntry.inf
+    !else
+      UefiPayloadPkg/UefiPayloadEntry/UefiPayloadEntry.inf
+    !endif
   !else
     UefiPayloadPkg/UefiPayloadEntry/UefiPayloadEntry.inf
   !endif
