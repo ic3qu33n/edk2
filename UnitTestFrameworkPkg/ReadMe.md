@@ -59,7 +59,7 @@ reviewed. The paths to the SecureBootVariableLib unit tests are:
 | Unit Test Source Language   |     C     |    C++     |
 | Register Test Suite         |    YES    |    Auto    |
 | Register Test Case          |    YES    |    Auto    |
-| Death/Expected Assert Tests |    YES    |    YES     |
+| Expected Assert Tests       |    YES    |    YES     |
 | Setup/Teardown Hooks        |    YES    |    YES     |
 | Value-Parameterized Tests   |    NO     |    YES     |
 | Typed Tests                 |    NO     |    YES     |
@@ -485,8 +485,8 @@ function to be compiled into the test application and then hooked to during a
 test.
 
 This library is mainly a wrapper around the
-[subhook](https://github.com/Zeex/subhook) header and source files. It is
-important to note that the use of the mock function macros and the creation
+[subhook](https://github.com/tianocore/edk2-subhook) header and source files. It
+is important to note that the use of the mock function macros and the creation
 of mock functions requires no knowledge about the SubhookLib. The SubhookLib
 library is entirely hidden and encapsulated within FunctionMockLib, and it
 is only mentioned here to provide a complete explanation on all the libraries

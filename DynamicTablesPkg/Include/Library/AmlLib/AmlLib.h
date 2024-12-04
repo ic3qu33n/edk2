@@ -1,8 +1,8 @@
 /** @file
   AML Lib.
 
-  Copyright (c) 2019 - 2021, Arm Limited. All rights reserved.<BR>
-  Copyright (C) 2023 Advanced Micro Devices, Inc. All rights reserved.<BR>
+  Copyright (c) 2019 - 2023, Arm Limited. All rights reserved.<BR>
+  Copyright (C) 2023 - 2024, Advanced Micro Devices, Inc. All rights reserved.<BR>
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
@@ -37,7 +37,7 @@
   @}
 */
 
-#include <AmlCpcInfo.h>
+#include <AcpiObjects.h>
 #include <IndustryStandard/Acpi.h>
 
 #ifndef AML_HANDLE
@@ -339,7 +339,7 @@ EFI_STATUS
 EFIAPI
 AmlFindNode (
   IN  AML_NODE_HANDLE  ReferenceNode,
-  IN  CHAR8            *AslPath,
+  IN  CONST CHAR8      *AslPath,
   OUT AML_NODE_HANDLE  *OutNode
   );
 
@@ -374,7 +374,7 @@ EFI_STATUS
 EFIAPI
 AmlDeviceOpUpdateName (
   IN  AML_OBJECT_NODE_HANDLE  DeviceOpNode,
-  IN  CHAR8                   *NewNameString
+  IN  CONST CHAR8             *NewNameString
   );
 
 /** Update an integer value defined by a NameOp object node.
@@ -1028,6 +1028,48 @@ AmlCodeGenRdInterrupt (
   OUT AML_DATA_NODE_HANDLE    *NewRdNode  OPTIONAL
   );
 
+/** Code generation for the "IO ()" ASL function.
+
+  The Resource Data effectively created is a IO Resource
+  Data. Cf ACPI 6.5:
+   - s19.6.65 IO (IO Resource Descriptor Macro)
+   - s6.4.2.5 I/O Port Descriptor
+
+  The created resource data node can be:
+   - appended to the list of resource data elements of the NameOpNode.
+     In such case NameOpNode must be defined by a the "Name ()" ASL statement
+     and initially contain a "ResourceTemplate ()".
+   - returned through the NewRdNode parameter.
+
+  @param [in]  IsDecoder16          Decoder parameter.
+                                    TRUE if 16-bit decoder.
+                                    FALSE if 10-bit decoder.
+  @param [in]  AddressMinimum       Minimum address.
+  @param [in]  AddressMaximum       Maximum address.
+  @param [in]  Alignment            Alignment.
+  @param [in]  RangeLength          Range length.
+  @param [in]  NameOpNode           NameOp object node defining a named object.
+                                    If provided, append the new resource data
+                                    node to the list of resource data elements
+                                    of this node.
+  @param [out] NewRdNode            If provided and success,
+                                    contain the created node.
+
+  @retval EFI_SUCCESS               The function completed successfully.
+  @retval EFI_INVALID_PARAMETER     Invalid parameter.
+**/
+EFI_STATUS
+EFIAPI
+AmlCodeGenRdIo (
+  IN  BOOLEAN IsDecoder16,
+  IN  UINT16 AddressMinimum,
+  IN  UINT16 AddressMaximum,
+  IN  UINT8 Alignment,
+  IN  UINT8 RangeLength,
+  IN  AML_OBJECT_NODE_HANDLE NameOpNode, OPTIONAL
+  OUT AML_DATA_NODE_HANDLE  *NewRdNode  OPTIONAL
+  );
+
 /** AML code generation for DefinitionBlock.
 
   Create a Root Node handle.
@@ -1090,7 +1132,7 @@ EFI_STATUS
 EFIAPI
 AmlCodeGenNameString (
   IN  CONST CHAR8                   *NameString,
-  IN        CHAR8                   *String,
+  IN  CONST CHAR8                   *String,
   IN        AML_NODE_HANDLE         ParentNode      OPTIONAL,
   OUT       AML_OBJECT_NODE_HANDLE  *NewObjectNode   OPTIONAL
   );
@@ -1613,7 +1655,7 @@ AmlAddLpiState (
   IN  UINT64                                  Integer                     OPTIONAL,
   IN  EFI_ACPI_6_3_GENERIC_ADDRESS_STRUCTURE  *ResidencyCounterRegister    OPTIONAL,
   IN  EFI_ACPI_6_3_GENERIC_ADDRESS_STRUCTURE  *UsageCounterRegister        OPTIONAL,
-  IN  CHAR8                                   *StateName                   OPTIONAL,
+  IN  CONST CHAR8                             *StateName                   OPTIONAL,
   IN  AML_OBJECT_NODE_HANDLE                  LpiNode
   );
 
@@ -1668,7 +1710,7 @@ AmlAddDeviceDataDescriptorPackage (
 EFI_STATUS
 EFIAPI
 AmlAddNameIntegerPackage (
-  IN CHAR8                   *Name,
+  IN CONST CHAR8             *Name,
   IN UINT64                  Value,
   IN AML_OBJECT_NODE_HANDLE  PackageNode
   );
@@ -1739,8 +1781,47 @@ AmlCreateCpcNode (
 EFI_STATUS
 EFIAPI
 AmlAddNameStringToNamedPackage (
-  IN CHAR8                   *NameString,
+  IN CONST CHAR8             *NameString,
   IN AML_OBJECT_NODE_HANDLE  NamedNode
+  );
+
+/** Add an integer value to the named package node.
+
+  AmlCodeGenNamePackage ("_CID", NULL, &PackageNode);
+  AmlGetEisaIdFromString ("PNP0A03", &EisaId);
+  AmlAddIntegerToNamedPackage (EisaId, NameNode);
+  AmlGetEisaIdFromString ("PNP0A08", &EisaId);
+  AmlAddIntegerToNamedPackage (EisaId, NameNode);
+
+  equivalent of the following ASL code:
+  Name (_CID, Package (0x02)  // _CID: Compatible ID
+  {
+      EisaId ("PNP0A03"),
+      EisaId ("PNP0A08")
+  })
+
+  The package is added at the tail of the list of the input package node
+  name:
+    Name ("NamePackageNode", Package () {
+      [Pre-existing package entries],
+      [Newly created integer entry]
+    })
+
+
+  @ingroup CodeGenApis
+
+  @param [in]       Integer       Integer value that need to be added to package node.
+  @param [in, out]  NameNode      Package named node to add the object to.
+
+  @retval EFI_SUCCESS             Success.
+  @retval EFI_INVALID_PARAMETER   Invalid parameter.
+  @retval Others                  Error occurred during the operation.
+**/
+EFI_STATUS
+EFIAPI
+AmlAddIntegerToNamedPackage (
+  IN        UINT32                  Integer,
+  IN  OUT   AML_OBJECT_NODE_HANDLE  NameNode
   );
 
 /** AML code generation to invoke/call another method.
@@ -1803,6 +1884,39 @@ AmlCodeGenInvokeMethod (
   IN        UINT8             NumArgs,
   IN        AML_METHOD_PARAM  *Parameters   OPTIONAL,
   IN        AML_NODE_HANDLE   ParentNode
+  );
+
+/** Create a _PSD node.
+
+  Creates and optionally adds the following node
+   Name(_PSD, Package()
+   {
+    NumEntries,  // Integer
+    Revision,    // Integer
+    Domain,      // Integer
+    CoordType,   // Integer
+    NumProc,     // Integer
+  })
+
+  Cf. ACPI 6.5, s8.4.5.5 _PSD (P-State Dependency)
+
+  @ingroup CodeGenApis
+
+  @param [in]  PsdInfo      PsdInfo object
+  @param [in]  ParentNode   If provided, set ParentNode as the parent
+                            of the node created.
+  @param [out] NewPsdNode   If success and provided, contains the created node.
+
+  @retval EFI_SUCCESS             The function completed successfully.
+  @retval EFI_INVALID_PARAMETER   Invalid parameter.
+  @retval EFI_OUT_OF_RESOURCES    Failed to allocate memory.
+**/
+EFI_STATUS
+EFIAPI
+AmlCreatePsdNode (
+  IN  AML_PSD_INFO            *PsdInfo,
+  IN  AML_NODE_HANDLE         ParentNode    OPTIONAL,
+  OUT AML_OBJECT_NODE_HANDLE  *NewPsdNode   OPTIONAL
   );
 
 #endif // AML_LIB_H_

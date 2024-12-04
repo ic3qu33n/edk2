@@ -110,6 +110,7 @@ class HostBasedUnitTestRunner(IUefiBuildPlugin):
                 if ret != 0:
                     logging.error("UnitTest Execution Error: " +
                                   os.path.basename(test))
+                    failure_count += 1
                 else:
                     logging.info("UnitTest Completed: " +
                                  os.path.basename(test))
@@ -155,7 +156,8 @@ class HostBasedUnitTestRunner(IUefiBuildPlugin):
             return 1
 
         # Coverage data for tested files only
-        ret = RunCmd("lcov", f"--capture --directory {buildOutputBase}/ --output-file {buildOutputBase}/coverage-test.info --rc lcov_branch_coverage=1")
+        # `--ignore-errors mismatch` needed to make lcov v2.0+/gcov work.
+        ret = RunCmd("lcov", f"--capture --directory {buildOutputBase}/ --output-file {buildOutputBase}/coverage-test.info --rc lcov_branch_coverage=1 --ignore-errors mismatch")
         if ret != 0:
             logging.error("UnitTest Coverage: Failed to build coverage data for tested files.")
             return 1

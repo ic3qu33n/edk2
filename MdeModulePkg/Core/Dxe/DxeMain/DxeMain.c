@@ -277,16 +277,10 @@ DxeMain (
   MemoryProfileInit (HobStart);
 
   //
-  // Allocate the EFI System Table and EFI Runtime Service Table from EfiRuntimeServicesData
-  // Use the templates to initialize the contents of the EFI System Table and EFI Runtime Services Table
+  // Start the Handle Services.
   //
-  gDxeCoreST = AllocateRuntimeCopyPool (sizeof (EFI_SYSTEM_TABLE), &mEfiSystemTableTemplate);
-  ASSERT (gDxeCoreST != NULL);
-
-  gDxeCoreRT = AllocateRuntimeCopyPool (sizeof (EFI_RUNTIME_SERVICES), &mEfiRuntimeServicesTableTemplate);
-  ASSERT (gDxeCoreRT != NULL);
-
-  gDxeCoreST->RuntimeServices = gDxeCoreRT;
+  Status = CoreInitializeHandleServices ();
+  ASSERT_EFI_ERROR (Status);
 
   //
   // Start the Image Services.
@@ -299,6 +293,23 @@ DxeMain (
   //
   Status = CoreInitializeGcdServices (&HobStart, MemoryBaseAddress, MemoryLength);
   ASSERT_EFI_ERROR (Status);
+
+  //
+  // Allocate the EFI System Table and EFI Runtime Service Table from EfiRuntimeServicesData
+  // Use the templates to initialize the contents of the EFI System Table and EFI Runtime Services Table
+  //
+  gDxeCoreST = AllocateRuntimeCopyPool (sizeof (EFI_SYSTEM_TABLE), &mEfiSystemTableTemplate);
+  ASSERT (gDxeCoreST != NULL);
+
+  gDxeCoreRT = AllocateRuntimeCopyPool (sizeof (EFI_RUNTIME_SERVICES), &mEfiRuntimeServicesTableTemplate);
+  ASSERT (gDxeCoreRT != NULL);
+
+  gDxeCoreST->RuntimeServices = gDxeCoreRT;
+
+  //
+  // Update DXE Core Loaded Image Protocol with allocated UEFI System Table
+  //
+  gDxeCoreLoadedImage->SystemTable = gDxeCoreST;
 
   //
   // Call constructor for all libraries
